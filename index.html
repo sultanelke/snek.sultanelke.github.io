@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>snek</title>
+    <title>snek n brek</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
@@ -29,6 +29,15 @@
         }
         canvas {
             image-rendering: pixelated;
+            touch-action: none;
+        }
+        .game-tab-active {
+            background-color: #ffffff;
+            color: #000000;
+        }
+        .touch-brek.hidden,
+        .touch-snek.hidden {
+            display: none !important;
         }
     </style>
 </head>
@@ -36,12 +45,41 @@
 
     <!-- Container -->
     <div class="w-full max-w-md flex flex-col items-center">
+
+        <!-- Game Selector -->
+        <div class="w-full grid grid-cols-2 gap-2 mb-4">
+            <button id="snekTab" class="retro-btn game-tab-active px-4 py-2 text-lg uppercase tracking-widest">
+                SNEK
+            </button>
+            <button id="brekTab" class="retro-btn px-4 py-2 text-lg uppercase tracking-widest">
+                brek
+            </button>
+        </div>
+
+        <!-- Difficulty Selector -->
+        <div class="w-full mb-4 px-2">
+            <div class="text-xs text-zinc-500 uppercase tracking-widest mb-2 text-center">Difficulty</div>
+            <div class="grid grid-cols-3 gap-2">
+                <button id="easyDifficulty" class="retro-btn px-2 py-1 text-sm uppercase tracking-widest">Easy</button>
+                <button id="normalDifficulty" class="retro-btn game-tab-active px-2 py-1 text-sm uppercase tracking-widest">Normal</button>
+                <button id="hardDifficulty" class="retro-btn px-2 py-1 text-sm uppercase tracking-widest">Hard</button>
+            </div>
+        </div>
+
+        <!-- brek Brick Amount Selector -->
+        <div id="brickAmountSelector" class="w-full mb-4 px-2 hidden">
+            <div class="text-xs text-zinc-500 uppercase tracking-widest mb-2 text-center">Bricks</div>
+            <div class="grid grid-cols-2 gap-2">
+                <button id="normalBricks" class="retro-btn game-tab-active px-2 py-1 text-sm uppercase tracking-widest">Normal</button>
+                <button id="moreBricks" class="retro-btn px-2 py-1 text-sm uppercase tracking-widest">More</button>
+            </div>
+        </div>
         
         <!-- Header & Stats -->
         <div class="w-full flex justify-between items-end mb-4 px-2">
             <div>
-                <h1 class="text-4xl font-bold tracking-widest uppercase">SNEK</h1>
-                <p class="text-xs text-zinc-400 tracking-wider">made by sultan elke</p>
+                <h1 id="gameTitle" class="text-4xl font-bold tracking-widest uppercase">SNEK</h1>
+                <p class="text-xs text-zinc-400 tracking-wider">vibecoded by sultan elke</p>
             </div>
             <div class="text-right">
                 <div class="text-sm text-zinc-400 uppercase tracking-widest">Score</div>
@@ -78,13 +116,17 @@
         </div>
 
         <!-- Touch Controls for Mobile -->
-        <div class="mt-6 grid grid-cols-3 gap-2 w-48 sm:hidden">
+        <div id="snekTouch" class="touch-snek mt-6 grid grid-cols-3 gap-2 w-48 sm:hidden">
             <div></div>
             <button id="btnUp" class="retro-btn p-3 text-center text-xl font-bold">▲</button>
             <div></div>
             <button id="btnLeft" class="retro-btn p-3 text-center text-xl font-bold">◄</button>
             <button id="btnDown" class="retro-btn p-3 text-center text-xl font-bold">▼</button>
             <button id="btnRight" class="retro-btn p-3 text-center text-xl font-bold">►</button>
+        </div>
+        <div id="brekTouch" class="touch-brek mt-6 grid grid-cols-2 gap-2 w-48 sm:hidden hidden">
+            <button id="brekLeft" class="retro-btn p-3 text-center text-xl font-bold">◄</button>
+            <button id="brekRight" class="retro-btn p-3 text-center text-xl font-bold">►</button>
         </div>
     </div>
 
@@ -98,30 +140,59 @@
         const overlaySubtitle = document.getElementById('overlaySubtitle');
         const startBtn = document.getElementById('startBtn');
         const pauseBtn = document.getElementById('pauseBtn');
+        const snekTab = document.getElementById('snekTab');
+        const brekTab = document.getElementById('brekTab');
+        const gameTitle = document.getElementById('gameTitle');
+        const snekTouch = document.getElementById('snekTouch');
+        const brekTouch = document.getElementById('brekTouch');
+        const easyDifficulty = document.getElementById('easyDifficulty');
+        const normalDifficulty = document.getElementById('normalDifficulty');
+        const hardDifficulty = document.getElementById('hardDifficulty');
+        const brickAmountSelector = document.getElementById('brickAmountSelector');
+        const normalBricks = document.getElementById('normalBricks');
+        const moreBricks = document.getElementById('moreBricks');
 
         // Grid Configuration
         const GRID_SIZE = 20;
         const TILE_COUNT = canvas.width / GRID_SIZE;
 
         // Game State Variables
-        let snake = [];
+        let snek = [];
         let food = { x: 0, y: 0 };
         let dx = GRID_SIZE;
         let dy = 0;
         let nextDx = GRID_SIZE;
         let nextDy = 0;
         let score = 0;
-        let highScore = localStorage.getItem('snake_high_score') || 0;
+        let highScore = localStorage.getItem('snek_high_score') || 0;
         let gameInterval = null;
         let isPaused = false;
         let isRunning = false;
-        const SPEED = 90; // Milliseconds per frame
+        let activeGame = 'snek';
+        let difficulty = 'normal';
+        let brickAmount = 'normal';
+
+        // brek State
+        let brekRunning = false;
+        let brekPaused = false;
+        let brekAnimation = null;
+        let brekScore = 0;
+        let brekLives = 3;
+        let brekHighScore = localStorage.getItem('brek_high_score') || 0;
+        let brekKeys = { left: false, right: false };
+        let brekPaddle = { x: 150, y: 370, width: 100, height: 12 };
+        let brekBall = { x: 200, y: 350, radius: 7, dx: 3.2, dy: -3.2 };
+        let brekBricks = [];
+        let brekPointerDragging = false;
+        let snekSwipeStart = null;
+        let countdownInterval = null;
+        let countdownActive = false;
 
         // Initialize display
         highScoreEl.innerText = String(highScore).padStart(4, '0');
 
         function initGame() {
-            snake = [
+            snek = [
                 { x: 5 * GRID_SIZE, y: 10 * GRID_SIZE },
                 { x: 4 * GRID_SIZE, y: 10 * GRID_SIZE },
                 { x: 3 * GRID_SIZE, y: 10 * GRID_SIZE }
@@ -140,22 +211,82 @@
             while (!valid) {
                 food.x = Math.floor(Math.random() * TILE_COUNT) * GRID_SIZE;
                 food.y = Math.floor(Math.random() * TILE_COUNT) * GRID_SIZE;
-                valid = !snake.some(segment => segment.x === food.x && segment.y === food.y);
+                valid = !snek.some(segment => segment.x === food.x && segment.y === food.y);
             }
         }
 
+        function getsnekSpeed() {
+            return {
+                easy: 120,
+                normal: 90,
+                hard: 65
+            }[difficulty];
+        }
+
+        function getbrekBallSpeed() {
+            return {
+                easy: 2.4,
+                normal: 3.2,
+                hard: 4.2
+            }[difficulty];
+        }
+
+        function clearCountdown() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+            countdownActive = false;
+            startBtn.classList.remove('hidden');
+        }
+
+        function runCountdown(onComplete) {
+            clearCountdown();
+            countdownActive = true;
+            let count = 3;
+
+            overlayTitle.innerText = 'GET READY';
+            overlaySubtitle.innerText = String(count);
+            startBtn.classList.add('hidden');
+            pauseBtn.classList.add('hidden');
+            overlay.classList.remove('hidden');
+
+            countdownInterval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    overlaySubtitle.innerText = String(count);
+                    return;
+                }
+
+                clearCountdown();
+                startBtn.classList.remove('hidden');
+                overlay.classList.add('hidden');
+                onComplete();
+            }, 1000);
+        }
+
         function startGame() {
-            initGame();
-            isRunning = true;
-            isPaused = false;
-            overlay.classList.add('hidden');
-            pauseBtn.classList.remove('hidden');
-            pauseBtn.innerText = 'PAUSE';
+            if (activeGame === 'brek') {
+                startbrek();
+                return;
+            }
             if (gameInterval) clearInterval(gameInterval);
-            gameInterval = setInterval(gameLoop, SPEED);
+            runCountdown(() => {
+                initGame();
+                isRunning = true;
+                isPaused = false;
+                pauseBtn.classList.remove('hidden');
+                pauseBtn.innerText = 'PAUSE';
+                gameInterval = setInterval(gameLoop, getsnekSpeed());
+            });
         }
 
         function togglePause() {
+            if (countdownActive) return;
+            if (activeGame === 'brek') {
+                togglebrekPause();
+                return;
+            }
             if (!isRunning) return;
             isPaused = !isPaused;
             if (isPaused) {
@@ -166,9 +297,14 @@
                 overlay.classList.remove('hidden');
                 pauseBtn.innerText = 'RESUME';
             } else {
-                overlay.classList.add('hidden');
-                pauseBtn.innerText = 'PAUSE';
-                gameInterval = setInterval(gameLoop, SPEED);
+                isPaused = true;
+                runCountdown(() => {
+                    isPaused = false;
+                    overlay.classList.add('hidden');
+                    pauseBtn.classList.remove('hidden');
+                    pauseBtn.innerText = 'PAUSE';
+                    gameInterval = setInterval(gameLoop, getsnekSpeed());
+                });
             }
         }
 
@@ -177,7 +313,7 @@
             clearInterval(gameInterval);
             if (score > highScore) {
                 highScore = score;
-                localStorage.setItem('snake_high_score', highScore);
+                localStorage.setItem('snek_high_score', highScore);
                 highScoreEl.innerText = String(highScore).padStart(4, '0');
             }
             overlayTitle.innerText = 'GAME OVER';
@@ -192,7 +328,7 @@
             dy = nextDy;
 
             // Calculate new head position
-            const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+            const head = { x: snek[0].x + dx, y: snek[0].y + dy };
 
             // Wall Collision Check
             if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
@@ -201,12 +337,12 @@
             }
 
             // Self Collision Check
-            if (snake.some(segment => segment.x === head.x && segment.y === head.y)) {
+            if (snek.some(segment => segment.x === head.x && segment.y === head.y)) {
                 gameOver();
                 return;
             }
 
-            snake.unshift(head);
+            snek.unshift(head);
 
             // Food Eating Check
             if (head.x === food.x && head.y === food.y) {
@@ -214,7 +350,7 @@
                 scoreEl.innerText = String(score).padStart(4, '0');
                 placeFood();
             } else {
-                snake.pop();
+                snek.pop();
             }
 
             draw();
@@ -245,8 +381,8 @@
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(food.x + 2, food.y + 2, GRID_SIZE - 4, GRID_SIZE - 4);
 
-            // Snake
-            snake.forEach((segment, index) => {
+            // snek
+            snek.forEach((segment, index) => {
                 if (index === 0) {
                     // Head: Solid White
                     ctx.fillStyle = '#ffffff';
@@ -261,6 +397,289 @@
             });
         }
 
+        function createbrekBricks() {
+            brekBricks = [];
+            const columns = brickAmount === 'more' ? 10 : 8;
+            const rows = brickAmount === 'more' ? 7 : 5;
+            const gap = 6;
+            const width = (canvas.width - 40 - gap * (columns - 1)) / columns;
+            const height = brickAmount === 'more' ? 16 : 22;
+
+            for (let row = 0; row < rows; row++) {
+                for (let column = 0; column < columns; column++) {
+                    brekBricks.push({
+                        x: 20 + column * (width + gap),
+                        y: 50 + row * (height + gap),
+                        width,
+                        height,
+                        alive: true
+                    });
+                }
+            }
+        }
+
+        function resetbrekBall() {
+            brekPaddle = { x: 150, y: 370, width: 100, height: 12 };
+            const ballSpeed = getbrekBallSpeed();
+            brekBall = { x: 200, y: 350, radius: 7, dx: ballSpeed, dy: -ballSpeed };
+        }
+
+        function initbrek() {
+            brekScore = 0;
+            brekLives = 3;
+            scoreEl.innerText = '0000';
+            highScoreEl.innerText = String(brekHighScore).padStart(4, '0');
+            resetbrekBall();
+            createbrekBricks();
+        }
+
+        function startbrek() {
+            if (brekAnimation) cancelAnimationFrame(brekAnimation);
+            runCountdown(() => {
+                initbrek();
+                brekRunning = true;
+                brekPaused = false;
+                pauseBtn.classList.remove('hidden');
+                pauseBtn.innerText = 'PAUSE';
+                brekAnimation = requestAnimationFrame(updatebrek);
+            });
+        }
+
+        function togglebrekPause() {
+            if (!brekRunning) return;
+            brekPaused = !brekPaused;
+
+            if (brekPaused) {
+                if (brekAnimation) cancelAnimationFrame(brekAnimation);
+                brekAnimation = null;
+                overlayTitle.innerText = 'PAUSED';
+                overlaySubtitle.innerText = 'PRESS PAUSE OR P TO RESUME';
+                startBtn.innerText = 'RESUME';
+                overlay.classList.remove('hidden');
+                pauseBtn.innerText = 'RESUME';
+            } else {
+                brekPaused = true;
+                runCountdown(() => {
+                    brekPaused = false;
+                    overlay.classList.add('hidden');
+                    pauseBtn.classList.remove('hidden');
+                    pauseBtn.innerText = 'PAUSE';
+                    brekAnimation = requestAnimationFrame(updatebrek);
+                });
+            }
+        }
+
+        function brekGameOver(won = false) {
+            brekRunning = false;
+            if (brekAnimation) cancelAnimationFrame(brekAnimation);
+            brekAnimation = null;
+
+            if (brekScore > brekHighScore) {
+                brekHighScore = brekScore;
+                localStorage.setItem('brek_high_score', brekHighScore);
+                highScoreEl.innerText = String(brekHighScore).padStart(4, '0');
+            }
+
+            overlayTitle.innerText = won ? 'YOU WIN' : 'GAME OVER';
+            overlaySubtitle.innerText = `FINAL SCORE: ${brekScore}`;
+            startBtn.innerText = 'TRY AGAIN';
+            overlay.classList.remove('hidden');
+            pauseBtn.classList.add('hidden');
+        }
+
+        function drawbrek() {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = '#111111';
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= canvas.width; x += 20) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= canvas.height; y += 20) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            brekBricks.forEach(brick => {
+                if (!brick.alive) return;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(brick.x, brick.y, brick.width, brick.height);
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(brick.x + 3, brick.y + 3, brick.width - 6, brick.height - 6);
+            });
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(brekPaddle.x, brekPaddle.y, brekPaddle.width, brekPaddle.height);
+            ctx.beginPath();
+            ctx.arc(brekBall.x, brekBall.y, brekBall.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.font = '16px VT323, monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText(`LIVES ${brekLives}`, canvas.width - 12, 24);
+        }
+
+        function updatebrek() {
+            if (!brekRunning || brekPaused) return;
+
+            if (brekKeys.left) brekPaddle.x -= 7;
+            if (brekKeys.right) brekPaddle.x += 7;
+            brekPaddle.x = Math.max(0, Math.min(canvas.width - brekPaddle.width, brekPaddle.x));
+
+            brekBall.x += brekBall.dx;
+            brekBall.y += brekBall.dy;
+
+            if (brekBall.x - brekBall.radius <= 0 || brekBall.x + brekBall.radius >= canvas.width) {
+                brekBall.dx *= -1;
+            }
+            if (brekBall.y - brekBall.radius <= 0) {
+                brekBall.dy *= -1;
+            }
+
+            const paddle = brekPaddle;
+            if (
+                brekBall.dy > 0 &&
+                brekBall.y + brekBall.radius >= paddle.y &&
+                brekBall.y - brekBall.radius <= paddle.y + paddle.height &&
+                brekBall.x >= paddle.x &&
+                brekBall.x <= paddle.x + paddle.width
+            ) {
+                const hitPosition = (brekBall.x - paddle.x) / paddle.width - 0.5;
+                const ballSpeed = getbrekBallSpeed();
+                brekBall.dx = Math.max(-ballSpeed * 0.75, Math.min(ballSpeed * 0.75, hitPosition * ballSpeed * 1.5));
+                brekBall.dy = -Math.sqrt(Math.max(0, ballSpeed * ballSpeed - brekBall.dx * brekBall.dx));
+                brekBall.y = paddle.y - brekBall.radius;
+            }
+
+            if (brekBall.y - brekBall.radius > canvas.height) {
+                brekLives--;
+                if (brekLives <= 0) {
+                    brekGameOver(false);
+                    return;
+                }
+                resetbrekBall();
+            }
+
+            brekBricks.forEach(brick => {
+                if (!brick.alive) return;
+                if (
+                    brekBall.x + brekBall.radius >= brick.x &&
+                    brekBall.x - brekBall.radius <= brick.x + brick.width &&
+                    brekBall.y + brekBall.radius >= brick.y &&
+                    brekBall.y - brekBall.radius <= brick.y + brick.height
+                ) {
+                    brick.alive = false;
+                    brekScore += 10;
+                    scoreEl.innerText = String(brekScore).padStart(4, '0');
+                    brekBall.dy *= -1;
+                }
+            });
+
+            if (brekBricks.every(brick => !brick.alive)) {
+                brekGameOver(true);
+                return;
+            }
+
+            drawbrek();
+            brekAnimation = requestAnimationFrame(updatebrek);
+        }
+
+        function stopActiveGame() {
+            clearCountdown();
+            if (gameInterval) {
+                clearInterval(gameInterval);
+                gameInterval = null;
+            }
+            if (brekAnimation) {
+                cancelAnimationFrame(brekAnimation);
+                brekAnimation = null;
+            }
+            isRunning = false;
+            brekRunning = false;
+            isPaused = false;
+            brekPaused = false;
+            brekKeys.left = false;
+            brekKeys.right = false;
+            brekPointerDragging = false;
+            snekSwipeStart = null;
+        }
+
+        function setDifficulty(level) {
+            difficulty = level;
+            easyDifficulty.classList.toggle('game-tab-active', level === 'easy');
+            normalDifficulty.classList.toggle('game-tab-active', level === 'normal');
+            hardDifficulty.classList.toggle('game-tab-active', level === 'hard');
+
+            stopActiveGame();
+            overlay.classList.remove('hidden');
+            pauseBtn.classList.add('hidden');
+            overlayTitle.innerText = 'PRESS START';
+            startBtn.innerText = 'START GAME';
+
+            if (activeGame === 'snek') {
+                overlaySubtitle.innerText = 'USE ARROWS OR WASD TO CONTROL';
+                initGame();
+                draw();
+            } else {
+                overlaySubtitle.innerText = 'USE ARROWS / A/D / DRAG YOUR MOUSE TO CONTROL';
+                initbrek();
+                drawbrek();
+            }
+        }
+
+        function setBrickAmount(amount) {
+            brickAmount = amount;
+            normalBricks.classList.toggle('game-tab-active', amount === 'normal');
+            moreBricks.classList.toggle('game-tab-active', amount === 'more');
+
+            stopActiveGame();
+            overlay.classList.remove('hidden');
+            pauseBtn.classList.add('hidden');
+            overlayTitle.innerText = 'PRESS START';
+            overlaySubtitle.innerText = 'USE ARROWS / A/D / DRAG YOUR MOUSE TO CONTROL';
+            startBtn.innerText = 'START GAME';
+            initbrek();
+            drawbrek();
+        }
+
+        function switchGame(game) {
+            stopActiveGame();
+            activeGame = game;
+            snekTab.classList.toggle('game-tab-active', game === 'snek');
+            brekTab.classList.toggle('game-tab-active', game === 'brek');
+            brickAmountSelector.classList.toggle('hidden', game !== 'brek');
+
+            if (game === 'snek') {
+                gameTitle.innerText = 'SNEK';
+                snekTouch.classList.remove('hidden');
+                brekTouch.classList.add('hidden');
+                highScoreEl.innerText = String(highScore).padStart(4, '0');
+                initGame();
+                draw();
+                overlayTitle.innerText = 'PRESS START';
+                overlaySubtitle.innerText = 'USE ARROWS OR WASD TO CONTROL';
+                startBtn.innerText = 'START GAME';
+            } else {
+                gameTitle.innerText = 'brek';
+                snekTouch.classList.add('hidden');
+                brekTouch.classList.remove('hidden');
+                initbrek();
+                drawbrek();
+                overlayTitle.innerText = 'PRESS START';
+                overlaySubtitle.innerText = 'USE ARROWS / A/D / DRAG YOUR MOUSE TO CONTROL';
+                startBtn.innerText = 'START GAME';
+            }
+
+            overlay.classList.remove('hidden');
+            pauseBtn.classList.add('hidden');
+        }
+
         // Input Handling
         function changeDirection(dir) {
             if (dir === 'UP' && dy === 0) { nextDx = 0; nextDy = -GRID_SIZE; }
@@ -271,18 +690,30 @@
 
         window.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
-            if (['arrowup', 'w'].includes(key)) changeDirection('UP');
-            if (['arrowdown', 's'].includes(key)) changeDirection('DOWN');
-            if (['arrowleft', 'a'].includes(key)) changeDirection('LEFT');
-            if (['arrowright', 'd'].includes(key)) changeDirection('RIGHT');
+
+            if (activeGame === 'snek') {
+                if (['arrowup', 'w'].includes(key)) changeDirection('UP');
+                if (['arrowdown', 's'].includes(key)) changeDirection('DOWN');
+                if (['arrowleft', 'a'].includes(key)) changeDirection('LEFT');
+                if (['arrowright', 'd'].includes(key)) changeDirection('RIGHT');
+            } else {
+                if (key === 'arrowleft' || key === 'a') brekKeys.left = true;
+                if (key === 'arrowright' || key === 'd') brekKeys.right = true;
+            }
 
             if (key === 'p') togglePause();
             if (key === 'r') startGame();
         });
 
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'arrowleft' || key === 'a') brekKeys.left = false;
+            if (key === 'arrowright' || key === 'd') brekKeys.right = false;
+        });
+
         // Button Event Listeners
         startBtn.addEventListener('click', () => {
-            if (isPaused) {
+            if ((activeGame === 'snek' && isPaused) || (activeGame === 'brek' && brekPaused)) {
                 togglePause();
             } else {
                 startGame();
@@ -296,6 +727,98 @@
         document.getElementById('btnDown').addEventListener('click', () => changeDirection('DOWN'));
         document.getElementById('btnLeft').addEventListener('click', () => changeDirection('LEFT'));
         document.getElementById('btnRight').addEventListener('click', () => changeDirection('RIGHT'));
+
+        snekTab.addEventListener('click', () => switchGame('snek'));
+        brekTab.addEventListener('click', () => switchGame('brek'));
+
+        const brekLeft = document.getElementById('brekLeft');
+        const brekRight = document.getElementById('brekRight');
+
+        brekLeft.addEventListener('pointerdown', () => {
+            brekKeys.left = true;
+        });
+        brekLeft.addEventListener('pointerup', () => {
+            brekKeys.left = false;
+        });
+        brekLeft.addEventListener('pointerleave', () => {
+            brekKeys.left = false;
+        });
+        brekRight.addEventListener('pointerdown', () => {
+            brekKeys.right = true;
+        });
+        brekRight.addEventListener('pointerup', () => {
+            brekKeys.right = false;
+        });
+        brekRight.addEventListener('pointerleave', () => {
+            brekKeys.right = false;
+        });
+
+        function movebrekPaddleToPointer(event) {
+            if (activeGame !== 'brek' || !brekRunning || brekPaused || countdownActive) return;
+
+            const bounds = canvas.getBoundingClientRect();
+            const canvasX = (event.clientX - bounds.left) * (canvas.width / bounds.width);
+            brekPaddle.x = Math.max(
+                0,
+                Math.min(canvas.width - brekPaddle.width, canvasX - brekPaddle.width / 2)
+            );
+        }
+
+        canvas.addEventListener('pointerdown', event => {
+            if (activeGame === 'brek') {
+                brekPointerDragging = true;
+                movebrekPaddleToPointer(event);
+            } else if (activeGame === 'snek' && isRunning && !isPaused && !countdownActive) {
+                snekSwipeStart = { x: event.clientX, y: event.clientY };
+            }
+
+            try {
+                canvas.setPointerCapture(event.pointerId);
+            } catch (error) {
+                // Some synthetic pointer events do not expose an active pointer.
+            }
+        });
+
+        canvas.addEventListener('pointermove', event => {
+            if (activeGame !== 'brek') return;
+            if (brekPointerDragging || event.pointerType === 'mouse') {
+                movebrekPaddleToPointer(event);
+            }
+        });
+
+        canvas.addEventListener('pointerup', event => {
+            brekPointerDragging = false;
+
+            if (activeGame === 'snek' && snekSwipeStart && isRunning && !isPaused && !countdownActive) {
+                const deltaX = event.clientX - snekSwipeStart.x;
+                const deltaY = event.clientY - snekSwipeStart.y;
+                const swipeThreshold = 24;
+
+                if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) >= swipeThreshold) {
+                    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                        changeDirection(deltaX > 0 ? 'RIGHT' : 'LEFT');
+                    } else {
+                        changeDirection(deltaY > 0 ? 'DOWN' : 'UP');
+                    }
+                }
+            }
+            snekSwipeStart = null;
+
+            if (canvas.hasPointerCapture(event.pointerId)) {
+                canvas.releasePointerCapture(event.pointerId);
+            }
+        });
+
+        canvas.addEventListener('pointercancel', () => {
+            brekPointerDragging = false;
+            snekSwipeStart = null;
+        });
+
+        easyDifficulty.addEventListener('click', () => setDifficulty('easy'));
+        normalDifficulty.addEventListener('click', () => setDifficulty('normal'));
+        hardDifficulty.addEventListener('click', () => setDifficulty('hard'));
+        normalBricks.addEventListener('click', () => setBrickAmount('normal'));
+        moreBricks.addEventListener('click', () => setBrickAmount('more'));
 
         // Initial Draw Frame
         draw();
